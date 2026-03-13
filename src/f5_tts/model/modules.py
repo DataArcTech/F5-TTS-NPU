@@ -84,6 +84,7 @@ def get_vocos_mel_spectrogram(
     hop_length=256,
     win_length=1024,
 ):
+    original_device = waveform.device
     mel_stft = torchaudio.transforms.MelSpectrogram(
         sample_rate=target_sample_rate,
         n_fft=n_fft,
@@ -94,15 +95,15 @@ def get_vocos_mel_spectrogram(
         center=True,
         normalized=False,
         norm=None,
-    ).to(waveform.device)
+    )  # keep on CPU to avoid complex64 ops unsupported on NPU
     if len(waveform.shape) == 3:
         waveform = waveform.squeeze(1)  # 'b 1 nw -> b nw'
 
     assert len(waveform.shape) == 2
 
-    mel = mel_stft(waveform)
+    mel = mel_stft(waveform.cpu())
     mel = mel.clamp(min=1e-5).log()
-    return mel
+    return mel.to(original_device)
 
 
 class MelSpec(nn.Module):

@@ -5,7 +5,6 @@ import sys
 from concurrent.futures import ThreadPoolExecutor
 
 
-os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"  # for MPS device compatibility
 sys.path.append(f"{os.path.dirname(os.path.abspath(__file__))}/../../third_party/BigVGAN/")
 
 import hashlib
@@ -13,37 +12,22 @@ import re
 import tempfile
 from importlib.resources import files
 
-import matplotlib
-
-
-matplotlib.use("Agg")
-
-import matplotlib.pylab as plt
 import numpy as np
 import torch
 import torchaudio
 import tqdm
 from huggingface_hub import hf_hub_download
 from pydub import AudioSegment, silence
-from transformers import pipeline
 from vocos import Vocos
 
 from f5_tts.model import CFM
-from f5_tts.model.utils import convert_char_to_pinyin, get_tokenizer
+from f5_tts.model.utils import convert_char_to_pinyin, empty_device_cache, get_device, get_tokenizer
 
 
 _ref_audio_cache = {}
 _ref_text_cache = {}
 
-device = (
-    "cuda"
-    if torch.cuda.is_available()
-    else "xpu"
-    if torch.xpu.is_available()
-    else "mps"
-    if torch.backends.mps.is_available()
-    else "cpu"
-)
+device = get_device()
 
 tempfile_kwargs = {"delete_on_close": False} if sys.version_info >= (3, 12) else {"delete": False}
 
@@ -150,13 +134,9 @@ asr_pipe = None
 
 def initialize_asr_pipeline(device: str = device, dtype=None):
     if dtype is None:
-        dtype = (
-            torch.float16
-            if "cuda" in device
-            and torch.cuda.get_device_properties(device).major >= 7
-            and not torch.cuda.get_device_name().endswith("[ZLUDA]")
-            else torch.float32
-        )
+        dtype = torch.float16
+    from transformers import pipeline
+
     global asr_pipe
     asr_pipe = pipeline(
         "automatic-speech-recognition",
@@ -187,13 +167,7 @@ def transcribe(ref_audio, language=None):
 
 def load_checkpoint(model, ckpt_path, device: str, dtype=None, use_ema=True):
     if dtype is None:
-        dtype = (
-            torch.float16
-            if "cuda" in device
-            and torch.cuda.get_device_properties(device).major >= 7
-            and not torch.cuda.get_device_name().endswith("[ZLUDA]")
-            else torch.float32
-        )
+        dtype = torch.float16
     model = model.to(dtype)
 
     ckpt_type = ckpt_path.split(".")[-1]
@@ -225,7 +199,7 @@ def load_checkpoint(model, ckpt_path, device: str, dtype=None, use_ema=True):
         model.load_state_dict(checkpoint["model_state_dict"])
 
     del checkpoint
-    torch.cuda.empty_cache()
+    empty_device_cache()
 
     return model.to(device)
 
@@ -598,6 +572,10 @@ def remove_silence_for_generated_wav(filename):
 
 
 def save_spectrogram(spectrogram, path):
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pylab as plt
+
     plt.figure(figsize=(12, 4))
     plt.imshow(spectrogram, origin="lower", aspect="auto")
     plt.colorbar()

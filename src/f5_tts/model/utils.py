@@ -12,6 +12,21 @@ import torch
 from pypinyin import Style, lazy_pinyin
 from torch.nn.utils.rnn import pad_sequence
 
+import torch_npu  # noqa: F401
+
+
+# device utils
+
+device = "npu"
+
+
+def get_device():
+    return "npu"
+
+
+def empty_device_cache():
+    torch.npu.empty_cache()
+
 
 # seed everything
 
@@ -20,10 +35,8 @@ def seed_everything(seed=0):
     random.seed(seed)
     os.environ["PYTHONHASHSEED"] = str(seed)
     torch.manual_seed(seed)
-    torch.cuda.manual_seed(seed)
-    torch.cuda.manual_seed_all(seed)
-    torch.backends.cudnn.deterministic = True
-    torch.backends.cudnn.benchmark = False
+    torch.npu.manual_seed(seed)
+    torch.npu.manual_seed_all(seed)
 
 
 # helpers
